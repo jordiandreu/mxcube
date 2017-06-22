@@ -142,7 +142,7 @@ class DataPathWidget(QWidget):
         cursor_pos = self.data_path_layout.folder_ledit.cursorPosition()
         if len(new_value) > 0:
             available_chars = string.ascii_lowercase + string.ascii_uppercase + \
-                              string.digits + "-_" 
+                              string.digits + "-_/" 
             if self.enable_macros:
                 available_chars += "%"
             new_value = ''.join(i for i in str(new_value) if i in available_chars)
@@ -238,12 +238,18 @@ class DataPathWidget(QWidget):
         Descript. :
         """
         if conflict:
-            Qt4_widget_colors.set_widget_color(self.data_path_layout.prefix_ledit,
-                Qt4_widget_colors.LIGHT_RED, QPalette.Base)
-            Qt4_widget_colors.set_widget_color(self.data_path_layout.run_number_ledit,
-                Qt4_widget_colors.LIGHT_RED, QPalette.Base)
-            Qt4_widget_colors.set_widget_color(self.data_path_layout.folder_ledit,
-                Qt4_widget_colors.LIGHT_RED, QPalette.Base)
+            Qt4_widget_colors.set_widget_color(\
+                self.data_path_layout.prefix_ledit,
+                Qt4_widget_colors.LIGHT_RED,
+                QPalette.Base)
+            Qt4_widget_colors.set_widget_color(\
+                self.data_path_layout.run_number_ledit,
+                Qt4_widget_colors.LIGHT_RED,
+                QPalette.Base)
+            Qt4_widget_colors.set_widget_color(\
+                self.data_path_layout.folder_ledit,
+                Qt4_widget_colors.LIGHT_RED,
+                QPalette.Base)
 
             logging.getLogger("GUI").\
                 error('The current path settings will overwrite data ' + \
@@ -254,12 +260,18 @@ class DataPathWidget(QWidget):
             if self.path_conflict_state:
                 logging.getLogger("GUI").info('Path valid')
 
-            Qt4_widget_colors.set_widget_color(self.data_path_layout.prefix_ledit,
-                Qt4_widget_colors.WHITE, QPalette.Base)
-            Qt4_widget_colors.set_widget_color(self.data_path_layout.run_number_ledit,
-                Qt4_widget_colors.WHITE, QPalette.Base)
-            Qt4_widget_colors.set_widget_color(self.data_path_layout.folder_ledit,
-                Qt4_widget_colors.WHITE, QPalette.Base)
+                Qt4_widget_colors.set_widget_color(\
+                    self.data_path_layout.prefix_ledit,
+                    Qt4_widget_colors.WHITE,
+                    QPalette.Base)
+                Qt4_widget_colors.set_widget_color(\
+                    self.data_path_layout.run_number_ledit,
+                    Qt4_widget_colors.WHITE,
+                    QPalette.Base)
+                Qt4_widget_colors.set_widget_color(\
+                    self.data_path_layout.folder_ledit,
+                    Qt4_widget_colors.WHITE,
+                    QPalette.Base)
         self.path_conflict_state = conflict
             
 

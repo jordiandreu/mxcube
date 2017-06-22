@@ -80,7 +80,7 @@ class CreateDiscreteWidget(CreateTaskBase):
         self._acq_widget.acqParametersChangedSignal.\
              connect(self.acq_parameters_changed)
         self._data_path_widget.pathTemplateChangedSignal.\
-             connect(self.acq_parameters_changed)
+             connect(self.path_template_changed)
 
         self._acq_widget.madEnergySelectedSignal.connect(\
              self.mad_energy_selected)
@@ -140,6 +140,7 @@ class CreateDiscreteWidget(CreateTaskBase):
             self.setDisabled(False)
         elif isinstance(tree_item, Qt4_queue_item.DataCollectionQueueItem):
             dc = tree_item.get_model()
+            self._acq_widget.use_kappa(False)
 
             if not dc.is_helical():
                 if dc.is_executed():

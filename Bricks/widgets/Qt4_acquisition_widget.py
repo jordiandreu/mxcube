@@ -35,7 +35,7 @@ class AcquisitionWidget(QWidget):
     Descript. :
     """
   
-    acqParametersChangedSignal = pyqtSignal()
+    acqParametersChangedSignal = pyqtSignal(list)
     madEnergySelectedSignal = pyqtSignal(str, float, bool)
 
     def __init__(self, parent = None, name = None, fl = 0, acq_params = None,
@@ -54,6 +54,12 @@ class AcquisitionWidget(QWidget):
 
         # Internal variables --------------------------------------------------
         self.previous_energy = 0
+
+        # If the acq. widget is used with grids then total osc range is not
+        # equal to num_images * osc_range, but num_images_per_line * osc_range
+        # For grids the osc total range is updated when a grid is selected
+
+        self.grid_mode = False
 
         # Properties ---------------------------------------------------------- 
 
@@ -111,6 +117,8 @@ class AcquisitionWidget(QWidget):
              self.osc_start_ledit_changed)
         self.acq_widget_layout.osc_range_ledit.textEdited.connect(\
              self.osc_range_ledit_changed)
+        self.acq_widget_layout.osc_total_range_ledit.textEdited.connect(\
+             self.osc_total_range_ledit_changed)
         self.acq_widget_layout.energy_ledit.textEdited.connect(\
              self.energy_ledit_changed)
         self.acq_widget_layout.transmission_ledit.textEdited.connect(\
@@ -133,6 +141,8 @@ class AcquisitionWidget(QWidget):
              -10000, 10000, 4, self.acq_widget_layout.osc_start_ledit)
         self.osc_range_validator = QDoubleValidator(\
              -10000, 10000, 4, self.acq_widget_layout.osc_range_ledit)
+        self.osc_total_range_validator = QDoubleValidator(\
+             -10000, 10000, 4, self.acq_widget_layout.osc_total_range_ledit)
         self.kappa_validator = QDoubleValidator(\
              0, 360, 4, self.acq_widget_layout.kappa_ledit)
         self.kappa_phi_validator = QDoubleValidator(\
@@ -178,6 +188,13 @@ class AcquisitionWidget(QWidget):
         self.update_osc_range_limits()
         self.update_num_images_limits()
 
+    def osc_total_range_ledit_changed(self, new_value):
+        if not self.grid_mode:
+            self.acq_widget_layout.num_images_ledit.blockSignals(True)
+            self.acq_widget_layout.num_images_ledit.setText(\
+               "%d" % (float(new_value) / float(self.acq_widget_layout.osc_range_ledit.text()))) 
+            self.acq_widget_layout.num_images_ledit.blockSignals(False)
+
     def update_osc_start(self, new_value):
         """
         Updates osc line edit
@@ -197,7 +214,19 @@ class AcquisitionWidget(QWidget):
             self.update_osc_range_limits() 
             self.update_num_images_limits()
 
+    def update_osc_total_range(self):
+        self.acq_widget_layout.osc_total_range_ledit.blockSignals(True)
+        if not self.grid_mode:
+            try:
+                self.acq_widget_layout.osc_total_range_ledit.setText(str(\
+                     float(self.acq_widget_layout.osc_range_ledit.text()) * \
+                     float(self.acq_widget_layout.num_images_ledit.text())))
+            except:
+                pass
+        self.acq_widget_layout.osc_total_range_ledit.blockSignals(False)
+
     def osc_range_ledit_changed(self, new_value):
+        self.update_osc_total_range()
         self.update_num_images_limits()
 
     def update_kappa(self, new_value):
@@ -207,6 +236,8 @@ class AcquisitionWidget(QWidget):
         if not self.acq_widget_layout.kappa_ledit.hasFocus() and \
            new_value:
             self.acq_widget_layout.kappa_ledit.setText(str(new_value))
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
 
     def update_kappa_phi(self, new_value):
         """
@@ -215,6 +246,8 @@ class AcquisitionWidget(QWidget):
         if not self.acq_widget_layout.kappa_phi_ledit.hasFocus() and \
            new_value:
             self.acq_widget_layout.kappa_phi_ledit.setText(str(new_value))
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
 
     def use_osc_start(self, state):
         """
@@ -260,6 +293,10 @@ class AcquisitionWidget(QWidget):
                                                 self.acq_widget_layout.osc_range_ledit,
                                                 float, 
                                                 self.osc_range_validator)
+        self._acquisition_mib.bind_value_update('osc_total_range',
+                                                self.acq_widget_layout.osc_total_range_ledit,
+                                                float,
+                                                self.osc_total_range_validator)
 
         if 'kappa' in limits_dict:
             limits = tuple(map(float, limits_dict['kappa'].split(',')))
@@ -340,8 +377,8 @@ class AcquisitionWidget(QWidget):
                                self.acq_widget_layout.resolution_ledit,
                                float,
                                self.resolution_validator)
-        self.update_resolution_limits((self.resolution_validator.bottom(),
-                                       self.resolution_validator.top()))
+        #self.update_resolution_limits((self.resolution_validator.bottom(),
+        #                               self.resolution_validator.top()))
 
         self._acquisition_mib.\
              bind_value_update('shutterless',
@@ -367,13 +404,15 @@ class AcquisitionWidget(QWidget):
         if str(new_value).isdigit():
             #self._path_template.start_num = int(new_value)
             #widget = self.acq_widget_layout.first_image_ledit
-            self.acqParametersChangedSignal.emit()
+            self.acqParametersChangedSignal.emit(\
+                 self.check_parameter_conflict())
 
     def exposure_time_ledit_changed(self, new_values):
         """
         Descript. :
         """
-        self.acqParametersChangedSignal.emit()
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
 
     def num_images_ledit_change(self, new_value):
         """
@@ -381,7 +420,9 @@ class AcquisitionWidget(QWidget):
         """
         if str(new_value).isdigit():
             #self._path_template.num_files = int(new_value)
-            self.acqParametersChangedSignal.emit()
+            self.update_osc_total_range() 
+            self.acqParametersChangedSignal.emit(\
+                 self.check_parameter_conflict())
 
     def overlap_changed(self, new_value):
         """
@@ -468,9 +509,11 @@ class AcquisitionWidget(QWidget):
 
             self.madEnergySelectedSignal.emit(name, energy, True)
 
-    def energy_ledit_changed(self, energy):
+    def energy_ledit_changed(self, new_value):
         if "energy" not in self.value_changed_list:
             self.value_changed_list.append("energy") 
+        self.acqParametersChangedSignal.emit(\
+            self.check_parameter_conflict())
 
     def update_energy(self, energy, wav=None):
         """
@@ -479,34 +522,35 @@ class AcquisitionWidget(QWidget):
         if "energy" not in self.value_changed_list and \
            not self.acq_widget_layout.energy_ledit.hasFocus():
             self.acq_widget_layout.energy_ledit.setText(str(energy))
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
 
     def transmission_ledit_changed(self, transmission):
         if "transmission" not in self.value_changed_list:
             self.value_changed_list.append("transmission")
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
 
     def update_transmission(self, transmission):
-        """
-        Descript. :
-        """
         if "transmission" not in self.value_changed_list:
             self.acq_widget_layout.transmission_ledit.setText(str(transmission))
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
            
     def resolution_ledit_changed(self, resolution):
         if "resolution" not in self.value_changed_list:
             self.value_changed_list.append("resolution") 
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
 
     def update_resolution(self, resolution):
-        """
-        Descript. :
-        """
         if "resolution" not in self.value_changed_list and \
            not self.acq_widget_layout.resolution_ledit.hasFocus():
             self.acq_widget_layout.resolution_ledit.setText(str(resolution))
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
 
     def update_energy_limits(self, limits):
-        """
-        Descript. :
-        """
         if limits:
             self.energy_validator.setBottom(limits[0])
             self.energy_validator.setTop(limits[1])
@@ -517,9 +561,6 @@ class AcquisitionWidget(QWidget):
             self._acquisition_mib.validate_all()
 
     def update_transmission_limits(self, limits):
-        """
-        Descript. :
-        """
         if limits:
             self.transmission_validator.setBottom(limits[0])
             self.transmission_validator.setTop(limits[1])
@@ -530,9 +571,6 @@ class AcquisitionWidget(QWidget):
             self._acquisition_mib.validate_all()
 
     def update_resolution_limits(self, limits):
-        """
-        Descript. :
-        """
         if limits:
             self.resolution_validator.setBottom(limits[0])
             self.resolution_validator.setTop(limits[1])
@@ -543,9 +581,6 @@ class AcquisitionWidget(QWidget):
             self._acquisition_mib.validate_all()
 
     def update_detector_exp_time_limits(self, limits):
-        """
-        Descript. :
-        """
         if limits:
             self.exp_time_validator.setRange(limits[0], limits[1], 4)
             self.acq_widget_layout.exp_time_ledit.setToolTip(
@@ -651,6 +686,10 @@ class AcquisitionWidget(QWidget):
             self.acq_widget_layout.mad_cbox.setChecked(False)
             self.acq_widget_layout.energies_combo.setEnabled(False)
             self.acq_widget_layout.energies_combo.setCurrentIndex(0)
+        self.acqParametersChangedSignal.emit(\
+             self.check_parameter_conflict())
+
+        self.update_osc_total_range()
 
     def set_tunable_energy(self, state):
         """

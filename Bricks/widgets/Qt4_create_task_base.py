@@ -21,6 +21,7 @@ import os
 import abc
 import copy
 import logging
+from copy import deepcopy
 
 from QtImport import *
 
@@ -128,6 +129,8 @@ class CreateTaskBase(QWidget):
             bl_setup_hwobj.kappa_phi_axis_hwobj.connect('positionChanged', self.set_kappa_phi)
             bl_setup_hwobj.detector_hwobj.connect('detectorModeChanged', self.set_detector_roi_mode)
             bl_setup_hwobj.detector_hwobj.connect('expTimeLimitsChanged', self.set_detector_exp_time_limits)
+
+            self.set_resolution_limits(bl_setup_hwobj.resolution_hwobj.getLimits())
         except AttributeError as ex:
             msg = 'Could not connect to one or more hardware objects' + str(ex)
             logging.getLogger("HWR").warning(msg)
@@ -156,14 +159,18 @@ class CreateTaskBase(QWidget):
                 model.run_processing_parallel = run_processing_parallel and \
                   model.acquisitions[0].acquisition_parameters.num_images > 19
 
-    def acq_parameters_changed(self):
-        self._data_path_widget.update_file_name()
+    def acq_parameters_changed(self, conflict):
         if self._tree_brick:
+            self._tree_brick.acq_parameters_changed(conflict)
+ 
+    def path_template_changed(self):
+        self._data_path_widget.update_file_name()
+        if self._tree_brick is not None:
             self._tree_brick.dc_tree_widget.check_for_path_collisions()
             path_conflict = self._beamline_setup_hwobj.queue_model_hwobj.\
                             check_for_path_collisions(self._path_template)
-            self._data_path_widget.indicate_path_conflict(path_conflict)                    
-            self._tree_brick.dc_tree_widget.item_parameters_changed()
+            self._data_path_widget.indicate_path_conflict(path_conflict)
+            self._tree_brick.data_path_changed(path_conflict)
         
     def set_tree_brick(self, brick):
         self._tree_brick = brick
@@ -207,8 +214,19 @@ class CreateTaskBase(QWidget):
                     result = True
         return result
 
+    def _item_is_dc(self):
+        result = False
+
+        if self._current_selected_items:
+            item = self._current_selected_items[0]
+
+            if isinstance(item, Qt4_queue_item.TaskQueueItem) and \
+            not isinstance(item, Qt4_queue_item.DataCollectionGroupQueueItem):   
+                result = True
+        return result
+
     def set_energy(self, energy, wavelength):         
-        if self._item_is_group_or_sample() and energy:
+        if not self._item_is_dc() and energy:
             acq_widget = self.get_acquisition_widget()
             
             if acq_widget:
@@ -218,31 +236,31 @@ class CreateTaskBase(QWidget):
     def set_transmission(self, trans):
         acq_widget = self.get_acquisition_widget()
         
-        if self._item_is_group_or_sample() and acq_widget:
+        if not self._item_is_dc() and acq_widget:
             acq_widget.update_transmission(trans)
 
     def set_resolution(self, res):
         acq_widget = self.get_acquisition_widget()
         
-        if self._item_is_group_or_sample() and acq_widget:
+        if not self._item_is_dc() and acq_widget:
             acq_widget.update_resolution(res)
 
     def set_detector_roi_mode(self, detector_roi_mode):
         acq_widget = self.get_acquisition_widget()
 
-        if self._item_is_group_or_sample() and acq_widget:
+        if not self._item_is_dc() and acq_widget:
             acq_widget.update_detector_roi_mode(detector_roi_mode)
 
     def set_kappa(self, kappa):
         acq_widget = self.get_acquisition_widget()
 
-        if self._item_is_group_or_sample() and acq_widget:
+        if not self._item_is_dc() and acq_widget:
             acq_widget.update_kappa(kappa)
 
     def set_kappa_phi(self, kappa_phi):
         acq_widget = self.get_acquisition_widget()
 
-        if self._item_is_group_or_sample() and acq_widget:
+        if not self._item_is_dc() and acq_widget:
             acq_widget.update_kappa_phi(kappa_phi)
                                                       
     def set_run_number(self, run_number):
@@ -339,6 +357,7 @@ class CreateTaskBase(QWidget):
         sample_item = self.get_sample_item(tree_item)
         if self._data_path_widget:
             self._data_path_widget.enable_macros = False
+        
 
         if isinstance(tree_item, Qt4_queue_item.SampleQueueItem):
             sample_data_model = sample_item.get_model()
@@ -385,6 +404,7 @@ class CreateTaskBase(QWidget):
             #Update energy transmission and resolution
             if self._acq_widget:
                 self._update_etr()
+                self._acq_widget.use_kappa(True)
                 sample_data_model = sample_item.get_model()
                 energy_scan_result = sample_data_model.crystals[0].energy_scan_result
                 self._acq_widget.set_energies(energy_scan_result)
@@ -407,6 +427,7 @@ class CreateTaskBase(QWidget):
             #Update energy transmission and resolution
             if self._acq_widget:
                 self._update_etr()
+                self._acq_widget.use_kappa(True)
                 self._acq_widget.update_data_model(self._acquisition_parameters,
                                                    self._path_template)
             if self._data_path_widget:
@@ -555,35 +576,56 @@ class CreateTaskBase(QWidget):
         free_pin_mode = sample.free_pin_mode
         temp_tasks = self._create_task(sample, shape)
 
-        sample_is_mounted = True
+        if ((not free_pin_mode) and (not sample_is_mounted) or (not shape)):
+            # No centred positions selected, or selected sample not
+            # mounted create sample centring task.
 
-        if (not fully_automatic):
-            if ((not free_pin_mode) and (not sample_is_mounted) or (not shape)):
-                # No centred positions selected, or selected sample not
-                # mounted create sample centring task.
+            # Check if the tasks requires centring, assumes that all
+            # the "sub tasks" has the same centring requirements.
+            if temp_tasks[0].requires_centring():
+                if self._tree_brick.dc_tree_widget.centring_method == \
+                   queue_model_enumerables.CENTRING_METHOD.MANUAL:
 
-                # Check if the tasks requires centring, assumes that all
-                # the "sub tasks" has the same centring requirements.
-                if temp_tasks[0].requires_centring():
+                    #Manual 3 click centering
+                    acq_par = None
                     kappa = None
                     kappa_phi = None
-                    task_label = "Centring"
+                    task_label = "Manual centring"
+
                     if isinstance(temp_tasks[0], queue_model_objects.DataCollection):
-                        kappa = temp_tasks[0].acquisitions[0].acquisition_parameters.kappa
-                        kappa_phi = temp_tasks[0].acquisitions[0].acquisition_parameters.kappa_phi
-                        if kappa is not None and \
-                           kappa_phi is not None:
-                            task_label = "Centring (kappa=%0.1f,phi=%0.1f)" %\
-                                         (kappa, kappa_phi)
+                        acq_par = temp_tasks[0].acquisitions[0].\
+                          acquisition_parameters
                     elif isinstance(temp_tasks[0], queue_model_objects.Characterisation):
-                        kappa = temp_tasks[0].reference_image_collection.\
-                               acquisitions[0].acquisition_parameters.kappa
-                        kappa_phi = temp_tasks[0].reference_image_collection.\
-                               acquisitions[0].acquisition_parameters.kappa_phi
-                        if kappa and kappa_phi:
-                            task_label = "Centring (kappa=%0.1f,phi=%0.1f)"  % \
-                                         (kappa, kappa_phi)
-                    sc = queue_model_objects.SampleCentring(task_label, kappa, kappa_phi)
+                        acq_par =  temp_tasks[0].reference_image_collection.\
+                           acquisitions[0].acquisition_parameters
+
+                    if acq_par:
+                        kappa = acq_par.kappa
+                        kappa_phi = acq_par.kappa_phi
+                        if kappa is not None and kappa_phi is not None:
+                            task_label = "Manual centring (kappa=%0.1f,phi=%0.1f)" % \
+                              (kappa, kappa_phi)
+
+                    sc = queue_model_objects.SampleCentring(task_label,
+                                                            kappa,
+                                                            kappa_phi)
+                elif self._tree_brick.dc_tree_widget.centring_method == \
+                   queue_model_enumerables.CENTRING_METHOD.LOOP:
+
+                    #Optical automatic centering with user confirmation
+                    sc = queue_model_objects.OpticalCentring(user_confirms=True)
+                elif self._tree_brick.dc_tree_widget.centring_method == \
+                   queue_model_enumerables.CENTRING_METHOD.FULLY_AUTOMATIC:
+
+                    #Optical automatic centering without user confirmation
+                    sc = queue_model_objects.OpticalCentring()
+                elif self._tree_brick.dc_tree_widget.centring_method == \
+                   queue_model_enumerables.CENTRING_METHOD.XRAY:
+
+                    #Xray centering
+                    mesh_dc = self._create_dc_from_grid(sample)
+                    sc = queue_model_objects.XrayCentering(mesh_dc)
+                if sc:
                     tasks.append(sc)
 
         for task in temp_tasks:
@@ -679,6 +721,45 @@ class CreateTaskBase(QWidget):
             acq.acquisition_parameters.take_snapshots = 0
 
         return acq
+
+    def _create_dc_from_grid(self, sample, grid=None):
+        if grid is None:
+            grid = self._graphics_manager_hwobj.get_auto_grid()
+
+        print self._path_template.run_number
+        grid.set_snapshot(self._graphics_manager_hwobj.\
+                          get_scene_snapshot(grid))
+
+        grid_properties = grid.get_properties()
+
+        acq = self._create_acq(sample)
+        acq.acquisition_parameters.centred_position = \
+            grid.get_centred_position()
+        acq.acquisition_parameters.mesh_range = \
+            [grid_properties["dx_mm"],
+             grid_properties["dy_mm"]]
+        acq.acquisition_parameters.num_lines = \
+            grid_properties["num_lines"]
+        acq.acquisition_parameters.num_images = \
+            grid_properties["num_lines"] * \
+            grid_properties["num_images_per_line"]
+        grid.set_osc_range(acq.acquisition_parameters.osc_range)
+
+        processing_parameters = deepcopy(self._processing_parameters)
+
+        dc = queue_model_objects.DataCollection([acq],
+                                                sample.crystals[0],
+                                                processing_parameters)
+
+        dc.set_name(acq.path_template.get_prefix())
+        dc.set_number(acq.path_template.run_number)
+        dc.set_experiment_type(queue_model_enumerables.EXPERIMENT_TYPE.MESH)
+        dc.set_requires_centring(False)
+        dc.grid = grid
+
+        self._path_template.run_number += 1
+
+        return dc
 
     def shape_deleted(self, shape, shape_type):
         return

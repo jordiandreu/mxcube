@@ -49,16 +49,17 @@ class DataModelInputBinder(object):
             if type_fn == float and validator:
                 pattern = "%." + str(validator.decimals()) + 'f'
                 new_value = pattern % float(new_value)
- 
+
             # fix validation if PyQt4 and sipapi 1 is used
             if type(new_value) is str:
                  if "QString" in globals(): 
                      new_value = QString(new_value)
 
-            if self.__validated(field_name,
-                                validator,
-                                self.bindings[field_name][0], 
-                                new_value):
+            self.__validated(field_name,
+                             validator,
+                             self.bindings[field_name][0], 
+                             new_value)
+            if True:
                 if isinstance(widget, QLineEdit):
                     if type_fn is float and validator:
                         widget.setText('{:g}'.format(round(float(origin_value), \
@@ -91,11 +92,11 @@ class DataModelInputBinder(object):
                     == QValidator.Acceptable:
                 if self.bindings[field_name][3]:
                     Qt4_widget_colors.set_widget_color(widget,
-                                           Qt4_widget_colors.LINE_EDIT_CHANGED,
+                                           Qt4_widget_colors.LIGHT_YELLOW,
                                            QPalette.Base)
                 else:
                     Qt4_widget_colors.set_widget_color(widget, 
-                                                       Qt.white,
+                                                       Qt4_widget_colors.WHITE,
                                                        QPalette.Base) 
                 return True
             else:
@@ -104,6 +105,14 @@ class DataModelInputBinder(object):
                                                    QPalette.Base)
                 return False
         else:
+            if self.bindings[field_name][3]:
+                Qt4_widget_colors.set_widget_color(widget,
+                                                   Qt4_widget_colors.LIGHT_YELLOW,
+                                                   QPalette.Base)
+            else:
+                Qt4_widget_colors.set_widget_color(widget,
+                                                   Qt4_widget_colors.WHITE,
+                                                   QPalette.Base)
             return True
 
     def get_model(self):
@@ -112,6 +121,7 @@ class DataModelInputBinder(object):
     def set_model(self, obj):
         self.__model = obj
         self.init_bindings()
+        self.clear_edit()
         self.validate_all()
    
     def init_bindings(self):
@@ -119,6 +129,7 @@ class DataModelInputBinder(object):
             self._update_widget(field_name, None)
 
     def _update_widget(self, field_name, data_binder):
+
         if data_binder == self:
             return
         try:
@@ -189,7 +200,7 @@ class DataModelInputBinder(object):
 
             widget.setChecked(bool(getattr(self.__model, field_name)))
 
-        if validator:
+        if validator and not widget.toolTip():
             if isinstance(validator, QDoubleValidator):
                 tooltip = "%s limits %.2f : %.2f" % (field_name.replace("_", " ").capitalize(),
                                                      validator.bottom(),
@@ -208,7 +219,8 @@ class DataModelInputBinder(object):
             widget = item[1][0]
             validator = item[1][1]
             
-            if validator:
+            #if validator:
+            if True:
                 if isinstance(widget, QLineEdit):
                     if not self.__validated(key,
                                             validator,

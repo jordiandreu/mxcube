@@ -29,7 +29,7 @@ class AcquisitionWidgetSimple(QWidget):
     """
     Descript. :
     """
-    acqParametersChangedSignal = pyqtSignal()
+    acqParametersChangedSignal = pyqtSignal(list)
     madEnergySelectedSignal = pyqtSignal(str, float, bool)
 
     def __init__(self, parent = None, name = None, fl = 0, acq_params = None, 
@@ -46,6 +46,7 @@ class AcquisitionWidgetSimple(QWidget):
         self._beamline_setup_hwobj = None
 
         # Internal variables --------------------------------------------------
+        self.value_changed_list = []
 
         # Properties ---------------------------------------------------------- 
 
@@ -335,6 +336,14 @@ class AcquisitionWidgetSimple(QWidget):
             self.acq_widget_layout.exp_time_ledit.setToolTip(
                "Exposure time limits %0.3f : %0.3f" %(limits[0], limits[1]))
             self._acquisition_mib.validate_all()
+
+    def update_energy(self, energy, wav):
+        """
+        Descript. :
+        """
+        if "energy" not in self.value_changed_list and \
+           not self.acq_widget_layout.energy_ledit.hasFocus():
+            self.acq_widget_layout.energy_ledit.setText("%.4f" % float(energy))
 
     def init_detector_roi_modes(self):
         """

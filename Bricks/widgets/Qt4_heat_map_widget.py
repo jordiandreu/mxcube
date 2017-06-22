@@ -69,8 +69,8 @@ class HeatMapWidget(QWidget):
         _threshold_label = QLabel("Threshold: ", self._heat_map_tools_widget)
         self._threshold_slider = QSlider(Qt.Horizontal, 
                self._heat_map_tools_widget)
-        #self._relaunch_processing_button = QPushButton("Relaunch processing",
-        #     self._heat_map_tools_widget)
+        self._relaunch_processing_button = QPushButton("Relaunch processing",
+             self._heat_map_tools_widget)
         self._create_points_button = QPushButton("Create centring points", 
              self._heat_map_tools_widget)
 
@@ -87,7 +87,7 @@ class HeatMapWidget(QWidget):
         _heat_map_tools_hlayout.addWidget(_threshold_label)
         _heat_map_tools_hlayout.addWidget(self._threshold_slider)
         _heat_map_tools_hlayout.addStretch(0)
-        #_heat_map_tools_hlayout.addWidget(self._relaunch_processing_button)
+        _heat_map_tools_hlayout.addWidget(self._relaunch_processing_button)
         _heat_map_tools_hlayout.addWidget(self._create_points_button)
         _heat_map_tools_hlayout.setSpacing(2)
         _heat_map_tools_hlayout.setContentsMargins(2, 2, 2, 2)
@@ -125,8 +125,8 @@ class HeatMapWidget(QWidget):
         self._score_type_cbox.activated.connect(self.score_type_changed)
         self._threshold_slider.valueChanged.\
              connect(self.filter_min_slider_changed)
-        #self._relaunch_processing_button.clicked.\
-        #     connect(self.relaunch_processing_clicked)
+        self._relaunch_processing_button.clicked.\
+             connect(self.relaunch_processing_clicked)
         self._create_points_button.clicked.\
              connect(self.create_points_clicked)
         self._heat_map_plot.mouseClickedSignal.\
@@ -260,6 +260,7 @@ class HeatMapWidget(QWidget):
         elif self.__score_type_index == 4:
             self.__result_display = copy(self.__results["image_num"])
 
+        self.__result_display = numpy.transpose(self.__result_display)
         self.__filter_min_value = self.__result_display.max() * \
              self._threshold_slider.value() / 100.0
         self.__result_display[self.__result_display < self.__filter_min_value] = 0
@@ -272,6 +273,7 @@ class HeatMapWidget(QWidget):
                                           x_data,
                                           label="Total score",
                                           color="r")
+            """
             self._heat_map_plot.add_curve(self.__results["spots_num"],
                                           x_data,
                                           label="Number of spots",
@@ -290,14 +292,19 @@ class HeatMapWidget(QWidget):
                                           label="Resolution",
                                           color="m",
                                           marker="s")
-            self._heat_map_plot.enable_selection_range()
-            self._heat_map_plot.enable_legend()
+            """
+            #self._heat_map_plot.enable_selection_range()
+            #self._heat_map_plot.enable_legend()
         else:
-            self._heat_map_plot.plot_result(self.__result_display)
-
-            if self.__associated_grid: 
+            if self.__associated_grid:
                 self._summary_textbrowser.append("<b>Mesh parameters</b>")
                 grid_properties = self.__associated_grid.get_properties()
+
+
+                self._heat_map_plot.plot_result(self.__result_display,
+                                                aspect=grid_properties["dx_mm"] / \
+                                                       grid_properties["dy_mm"])
+
                 self._summary_textbrowser.append("Number of columns: %d" % \
                      grid_properties["steps_x"])
                 self._summary_textbrowser.append("Number of rows: %d" % \

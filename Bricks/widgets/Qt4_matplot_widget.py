@@ -183,11 +183,14 @@ class MplCanvas(FigureCanvas):
         self.curves = []
         self._axis_x_array = np.empty(0)
         self._axis_y_array = np.empty(0)
+        self._axis_x_limits = [None, None]
+        self._axis_y_limits = [None, None]
 
     def set_real_time(self, real_time):
         self.real_time = real_time
         #clear all axes after plot is called
-        self.axes.hold(not real_time)
+        #self.axes.hold(not real_time)
+        self.axes.clear()
 
     def set_max_plot_points(self, max_points):
         self.max_plot_points = max_points
@@ -203,11 +206,11 @@ class MplCanvas(FigureCanvas):
         if x_axis_array is None:
             self.curves.append(self.axes.plot(y_axis_array, 
                  label=label, linewidth=2, linestyle=linestyle,
-                 color=color, marker=marker))
+                 color=color))
         else:
             self.curves.append(self.axes.plot(x_axis_array, y_axis_array, 
                  label=label, linewidth=2, linestyle=linestyle,
-                 color=color, marker=marker))
+                 color=color))
         self.draw()
 
     def append_new_point(self, y, x=None):
@@ -223,9 +226,13 @@ class MplCanvas(FigureCanvas):
             self.single_curve, = self.axes.plot(self._axis_y_array,
                                                 linewidth=2)
         else:  
-           self.single_curve.set_xdata(self._axis_x_array)
-           self.single_curve.set_ydata(self._axis_y_array)
-           #Need both of these in order to rescale
+            self.axes.fill(self._axis_y_array, 'r', linewidth=2)
+
+        self._axis_y_limits[1]= self._axis_y_array.max() + self._axis_y_array.max() * 0.05
+        self.axes.set_ylim(self._axis_y_limits) 
+        self.single_curve.set_xdata(self._axis_x_array)
+        self.single_curve.set_ydata(self._axis_y_array)
+        #Need both of these in order to rescale
         self.axes.relim()
         self.axes.autoscale_view()
         #We need to draw *and* flush
@@ -408,7 +415,10 @@ class TwoDimenisonalPlotWidget(QWidget):
                 self.mpl_canvas.fig.canvas.draw()
                 self.mpl_canvas.fig.canvas.flush_events()
 
-    def plot_result(self, result, last_result=None):
+    def plot_result(self, result, aspect=None):
+        if not aspect:
+            aspect = 'auto'
+
         if self.im is None:
             self.im = self.mpl_canvas.axes.imshow(result, 
                       interpolation='none',  aspect='auto',
@@ -452,8 +462,7 @@ class TwoDimenisonalPlotWidget(QWidget):
                                   x_axis_array=None,
                                   label=None,
                                   linestyle=linestyle,
-                                  color=color,
-                                  marker=marker)
+                                  color=color)
         self.set_x_axis_limits((x_axis_array.min() - 1,
                                 x_axis_array.max() + 1))
 
