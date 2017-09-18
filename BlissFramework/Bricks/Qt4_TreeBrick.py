@@ -697,8 +697,9 @@ class Qt4_TreeBrick(BlissWidget):
             sample_index = sample.getIndex()
             basket_code = sample.getContainer().getID() or ""
             sample_name = sample.getName()
+            sample_location = [basket_index+1, sample_index+1]
             sc_sample_content.append((matrix, basket_index + 1, 
-                                      sample_index + 1, sample_name))
+                                      sample_index + 1, sample_name, sample_location))
         return sc_basket_content, sc_sample_content
 
     def get_plate_content(self):
